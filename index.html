@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Spotify Access Token Helper</title>
+  <title>Spotify Refresh Token Helper</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet"/>
@@ -93,48 +93,29 @@
       height: 20px;
       margin-top: 10px;
     }
-
-    #debug {
-      background-color: #111;
-      color: #0f0;
-      text-align: left;
-      padding: 10px;
-      max-height: 200px;
-      overflow-y: auto;
-      border-radius: 8px;
-      font-size: 0.85em;
-      margin-top: 30px;
-    }
-
-    h3 {
-      text-align: left;
-      margin-top: 40px;
-    }
   </style>
 </head>
 <body>
   <div class="container">
     <div id="login-area">
-      <h1>Get Your Spotify Token</h1>
-      <p>Click the button below to log in with your Spotify account. You'll be redirected back with your access token ready to copy.</p>
+      <h1>Get Your Spotify Refresh Token</h1>
+      <p>Click the button below to log in with your Spotify account. You'll be redirected back with your refresh token ready to copy.</p>
       <button id="login-btn" class="btn">Login with Spotify</button>
     </div>
 
     <div id="token-area" style="display:none;">
-      <h1>Your Access Token</h1>
+      <h1>Your Refresh Token</h1>
       <div id="token-box"></div>
       <button id="copy-btn" class="btn">Copy Token</button>
       <div id="copy-message"></div>
     </div>
-
-    <h3>Debug Console</h3>
-    <pre id="debug"></pre>
   </div>
 
   <script>
     const CLIENT_ID = 'a17cdd6ee24144f99cded06e508383ca';
     const REDIRECT_URI = 'https://spotify.djcheesus.com';
-    const SCOPE = 'user-read-playback-state user-read-currently-playing';
+    // Added 'offline_access' scope to get a refresh token
+    const SCOPE = 'user-read-playback-state user-read-currently-playing offline_access';
 
     const loginBtn = document.getElementById('login-btn');
     const tokenArea = document.getElementById('token-area');
@@ -142,16 +123,8 @@
     const tokenBox = document.getElementById('token-box');
     const copyBtn = document.getElementById('copy-btn');
     const copyMessage = document.getElementById('copy-message');
-    const debugConsole = document.getElementById('debug');
-
-    function debugLog(...args) {
-      const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : a).join(' ');
-      debugConsole.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-      debugConsole.scrollTop = debugConsole.scrollHeight;
-    }
 
     async function sha256(plain) {
-      debugLog('Hashing code_verifier...');
       const encoder = new TextEncoder();
       const data = encoder.encode(plain);
       const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -166,14 +139,12 @@
     }
 
     function generateCodeVerifier() {
-      debugLog('Generating code_verifier...');
       const array = new Uint8Array(64);
       crypto.getRandomValues(array);
       return base64urlEncode(array);
     }
 
     async function generateCodeChallenge(verifier) {
-      debugLog('Generating code_challenge...');
       const hashed = await sha256(verifier);
       return base64urlEncode(hashed);
     }
@@ -191,7 +162,6 @@
       authUrl.searchParams.set('code_challenge_method', 'S256');
       authUrl.searchParams.set('code_challenge', challenge);
 
-      debugLog('Redirecting to Spotify login...');
       window.location = authUrl.toString();
     }
 
@@ -203,8 +173,7 @@
       };
     }
 
-    async function fetchAccessToken(code, verifier) {
-      debugLog('Exchanging code for token...');
+    async function fetchToken(code, verifier) {
       const body = new URLSearchParams({
         client_id: CLIENT_ID,
         grant_type: 'authorization_code',
@@ -221,7 +190,7 @@
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch access token');
+        throw new Error(error.error || 'Failed to fetch token');
       }
 
       return response.json();
@@ -230,20 +199,16 @@
     function copyToClipboard(text) {
       navigator.clipboard.writeText(text).then(() => {
         copyMessage.textContent = '✅ Copied to clipboard!';
-        debugLog('Copied to clipboard.');
         setTimeout(() => (copyMessage.textContent = ''), 3000);
       }).catch(() => {
         copyMessage.textContent = '⚠️ Failed to copy automatically.';
-        debugLog('Clipboard write failed.');
       });
     }
 
     window.addEventListener('load', async () => {
-      debugLog('Page loaded.');
       const { code, error } = getQueryParams();
 
       if (error) {
-        debugLog('Auth error:', error);
         alert('Spotify auth error: ' + error);
         return;
       }
@@ -255,20 +220,21 @@
         const verifier = sessionStorage.getItem('code_verifier');
         if (!verifier) {
           tokenBox.textContent = 'Error: Missing code verifier.';
-          debugLog('Missing code verifier.');
           return;
         }
 
         try {
-          const tokenResponse = await fetchAccessToken(code, verifier);
-          tokenBox.textContent = tokenResponse.access_token;
-          copyToClipboard(tokenResponse.access_token);
-          debugLog('Access token received:', tokenResponse);
+          const tokenResponse = await fetchToken(code, verifier);
+          if (tokenResponse.refresh_token) {
+            tokenBox.textContent = tokenResponse.refresh_token;
+            copyToClipboard(tokenResponse.refresh_token);
+          } else {
+             tokenBox.textContent = 'Error: Refresh token not provided by Spotify. Ensure "offline_access" scope is included.';
+          }
           history.replaceState(null, '', REDIRECT_URI);
           sessionStorage.removeItem('code_verifier');
         } catch (err) {
-          tokenBox.textContent = 'Error fetching access token: ' + err.message;
-          debugLog('Token exchange error:', err.message);
+          tokenBox.textContent = 'Error fetching token: ' + err.message;
         }
       }
     });
