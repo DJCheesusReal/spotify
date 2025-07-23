@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spotify Access Token Helper</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --surface-color: #1e1e1e;
+            --primary-text-color: #ffffff;
+            --secondary-text-color: #b3b3b3;
+            --spotify-green: #1DB954;
+            --spotify-green-hover: #1ED760;
+            --code-bg: #282828;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--primary-text-color);
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: var(--surface-color);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            transition: all 0.3s ease-in-out;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: var(--secondary-text-color);
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            background-color: var(--spotify-green);
+            color: var(--primary-text-color);
+            border: none;
+            border-radius: 500px;
+            padding: 15px 35px;
+            font-size: 1em;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.2s ease, transform 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            background-color: var(--spotify-green-hover);
+            transform: scale(1.05);
+        }
+
+        #token-display-area {
+            display: none; /* Hidden by default */
+        }
+
+        #token-box {
+            background-color: var(--code-bg);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            word-wrap: break-word;
+            text-align: left;
+            margin-bottom: 20px;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+
+        #copy-message {
+            color: var(--spotify-green);
+            font-weight: bold;
+            height: 20px; /* Reserve space to prevent layout shift */
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Login View -->
+        <div id="login-area">
+            <h1>Get Your Spotify Token</h1>
+            <p>Click the button below to log in with your Spotify account. You'll be redirected back here with your access token ready to go.</p>
+            <button id="login-button" class="btn">Login with Spotify</button>
+        </div>
+
+        <!-- Token Display View -->
+        <div id="token-display-area">
+            <h1>Your Access Token</h1>
+            <p id="copy-message"></p>
+            <div id="token-box"></div>
+            <button id="copy-button" class="btn">Copy Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Your Spotify App Credentials
+        const CLIENT_ID = "a17cdd6ee24144f99cded06e508383ca";
+        const REDIRECT_URI = "https://spotify.djcheesus.com";
+        const SCOPE = "user-read-playback-state user-read-currently-playing";
+
+        // DOM Elements
+        const loginArea = document.getElementById('login-area');
+        const tokenArea = document.getElementById('token-display-area');
+        const loginButton = document.getElementById('login-button');
+        const tokenBox = document.getElementById('token-box');
+        const copyButton = document.getElementById('copy-button');
+        const copyMessage = document.getElementById('copy-message');
+        
+        // --- Functions ---
+
+        /**
+         * Generates the Spotify authentication URL
+         */
+        function redirectToSpotifyLogin() {
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPE)}`;
+            window.location = authUrl;
+        }
+
+        /**
+         * Parses the access token from the URL hash
+         * @returns {string|null} The access token or null if not found
+         */
+        function getAccessToken() {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            return params.get('access_token');
+        }
+
+        /**
+         * Copies text to the user's clipboard and provides feedback
+         * @param {string} text The text to copy
+         */
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                copyButton.textContent = 'Copied!';
+                copyMessage.textContent = '✅ Token automatically copied to clipboard!';
+                setTimeout(() => {
+                    copyButton.textContent = 'Copy Again';
+                }, 3000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                copyMessage.textContent = '⚠️ Could not auto-copy. Please copy it manually.';
+            });
+        }
+
+        // --- Event Listeners and Page Logic ---
+
+        loginButton.addEventListener('click', redirectToSpotifyLogin);
+
+        copyButton.addEventListener('click', () => {
+            copyToClipboard(tokenBox.textContent);
+        });
+
+        // On page load, check for an access token in the URL
+        window.addEventListener('load', () => {
+            const token = getAccessToken();
+            if (token) {
+                // Show the token display area
+                loginArea.style.display = 'none';
+                tokenArea.style.display = 'block';
+
+                // Display the token
+                tokenBox.textContent = token;
+
+                // Automatically copy the token
+                copyToClipboard(token);
+
+                // Clean the URL by removing the hash
+                history.pushState("", document.title, window.location.pathname + window.location.search);
+            } else {
+                // Show the login area
+                loginArea.style.display = 'block';
+                tokenArea.style.display = 'none';
+            }
+        });
+    </script>
+
+</body>
+</html>
